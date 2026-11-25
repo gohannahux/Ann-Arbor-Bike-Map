@@ -47,6 +47,8 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--small);
   background:repeating-linear-gradient(135deg,var(--paper2) 0 10px,var(--paper) 10px 20px);display:grid;place-items:center}
 .phone svg{width:56px;height:56px}
 .phone small{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:var(--ink2);font-size:15px}
+.player{align-self:center;width:min(250px,100%);aspect-ratio:9/16;border:2px solid var(--ink);border-radius:14px;overflow:hidden;background:#000}
+.player iframe{width:100%;height:100%;border:0;display:block}
 .panel h2{margin:0;font:400 30px var(--display);line-height:1}
 .meta{color:var(--ink2);font-size:15px;margin:0}
 .say{font:700 20px var(--hand);line-height:1.1;margin:0}
@@ -68,6 +70,7 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--small);
   .panel.open{width:100%;height:56%}
   .panel-in{width:100%;flex-direction:row;flex-wrap:wrap;align-items:flex-start;gap:10px 14px}
   .phone{width:110px;align-self:flex-start}
+  .player{width:140px;align-self:flex-start}
   .legend{grid-template-columns:auto;font-size:15px;padding:6px 8px;bottom:10px}
   .hint{display:none}
 }
@@ -292,12 +295,12 @@ function openClip(c){
   selId=c.id;Object.values(segEls).forEach(g=>g.classList.remove('sel'));segEls[c.id].classList.add('sel');
   const url=c.yt?'https://www.youtube.com/shorts/'+c.yt:'';
   panelIn.innerHTML='<button class="close" id="pclose" aria-label="Close">&times;</button>'+
-  '<div class="phone" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M16 10 L46 28 L16 46 Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>'+(c.dur?c.dur+' · portrait':'no video yet')+'</small></div>'+
+  (c.yt?'<div class="player"><iframe src="https://www.youtube-nocookie.com/embed/'+c.yt+'?autoplay=1&rel=0&playsinline=1" title="'+c.st+', '+c.dir+'" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>':'<div class="phone" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M16 10 L46 28 L16 46 Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>no video yet</small></div>')+
   '<div><h2>'+c.st+'</h2><p class="meta">'+c.dir+' · '+c.from+' to '+c.to+'</p><p class="meta">'+(c.hood?c.hood+' · ':'')+INFRA[c.inf]+' '+stars(c.q)+'</p></div>'+
   (c.hover?'<p class="say">'+c.hover+'</p>':'')+(c.note?'<p class="note">'+c.note+'</p>':'')+
-  (url?'<a class="yt" href="'+url+'" target="_blank" rel="noopener">Watch the ride on YouTube &#8599;</a>':'<p class="meta">This one is filmed but not uploaded yet.</p>');
+  (url?'<a class="yt" href="'+url+'" target="_blank" rel="noopener">Open on YouTube &#8599;</a>':'<p class="meta">This one is filmed but not uploaded yet.</p>');
   panel.classList.add('open');document.getElementById('pclose').onclick=closePanel}
-function closePanel(){panel.classList.remove('open');Object.values(segEls).forEach(g=>g.classList.remove('sel'));selId=null}
+function closePanel(){panel.classList.remove('open');panelIn.innerHTML='';Object.values(segEls).forEach(g=>g.classList.remove('sel'));selId=null}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel()});
 C.forEach(c=>{const g=segEls[c.id];
   g.addEventListener('pointerenter',e=>{if(ptrs.size)return;tipEl.innerHTML='<b>'+c.st+'</b><em>'+c.dir+' · '+INFRA[c.inf]+' '+stars(c.q)+'</em>'+(c.hover?'<q>'+c.hover+'</q>':'');tipEl.classList.add('on');moveTip(e)});
