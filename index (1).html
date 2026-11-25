@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ann Arbor Bike Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,600;0,700;1,500&family=Young+Serif&display=swap">
+<style>
+/* Layout: one-screen illustrated map, pan and zoom, side panel for the clip */
+:root{
+  --paper:#fdf9f1; --paper2:#f9f0dd; --ink:#2f2a36; --ink2:#6e6168; --water:#9fc8e0; --water-ink:#3b7ba3; --grass:#a9b56c; --block:#fffaf0; --panel:#fbf5ea; --line:#dfd0b6;
+  --hwy:#d9b8a4; --hwy2:#ecd5c6; --protected:#2e7a4b; --painted:#276ba3; --sharrow:#c0407f; --shared:#e5a117; --trail:#1c8d8d; --gravel:#9a6a38; --sidewalk:#d9412e; --other:#7c8693;
+  --display:'Young Serif',Georgia,serif; --hand:'Figtree',system-ui,sans-serif; --small:'Figtree',system-ui,sans-serif;
+}
+html{color-scheme:light}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--small);font-size:16px;
+  padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px));overflow:hidden}
+.app{position:relative;height:100%;display:flex;min-width:0}
+#stage{position:relative;flex:1;min-width:0;cursor:grab;touch-action:none;overflow:hidden}
+#stage.drag{cursor:grabbing}
+#map{width:100%;height:100%;display:block}
+.title{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:12px;pointer-events:none}
+.title h1{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(34px,6vw,64px);line-height:.9;letter-spacing:.04em;
+  color:transparent;-webkit-text-stroke:1.6px var(--ink);text-transform:uppercase}
+.title p{margin:6px 0 0;font-size:15px;color:var(--ink2)}
+.legend{position:absolute;left:max(16px,env(safe-area-inset-left,0px));bottom:16px;display:grid;grid-template-columns:repeat(2,auto);gap:4px 18px;
+  background:color-mix(in srgb,var(--paper) 86%,transparent);padding:10px 12px;border:1.5px solid var(--ink);border-radius:3px 9px 4px 10px;font-size:14px}
+.legend span{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.legend i{width:30px;height:8px;border-radius:4px;display:inline-block}
+.legend .dash{background:repeating-linear-gradient(90deg,currentColor 0 6px,transparent 6px 10px)!important;height:4px}
+.zoom{position:absolute;right:14px;bottom:16px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:38px;height:38px;border:1.5px solid var(--ink);background:var(--paper);color:var(--ink);font:700 24px var(--hand);border-radius:4px 10px 5px 9px;cursor:pointer}
+.zoom button:focus-visible,.close:focus-visible,.yt:focus-visible{outline:3px solid var(--painted);outline-offset:2px}
+#tip{position:absolute;pointer-events:none;max-width:240px;background:var(--panel);border:1.5px solid var(--ink);border-radius:3px 10px 4px 9px;
+  padding:7px 10px;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;z-index:5}
+#tip.on{opacity:1;transform:none}
+#tip b{display:block;font:700 17px var(--hand);line-height:1.1}
+#tip em{display:block;font-style:normal;color:var(--ink2);font-size:13px;margin-top:2px}
+#tip q{display:block;font:500 17px var(--hand);margin-top:4px;quotes:none;line-height:1.15}
+.panel{width:0;overflow:hidden;background:var(--panel);border-left:1.5px solid var(--ink);transition:width .25s ease;flex:none}
+.panel.open{width:min(380px,92vw)}
+.panel-in{width:min(380px,92vw);height:100%;box-sizing:border-box;padding:16px 18px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.close{align-self:flex-end;border:1.5px solid var(--ink);background:transparent;color:var(--ink);font:700 22px var(--hand);border-radius:4px 9px 4px 9px;padding:0 12px;cursor:pointer}
+.phone{align-self:center;width:min(190px,52%);aspect-ratio:9/16;border:2px solid var(--ink);border-radius:20px 24px 19px 25px;position:relative;
+  background:repeating-linear-gradient(135deg,var(--paper2) 0 10px,var(--paper) 10px 20px);display:grid;place-items:center}
+.phone svg{width:56px;height:56px}
+.phone small{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:var(--ink2);font-size:15px}
+.player{align-self:center;width:min(250px,100%);aspect-ratio:9/16;border:2px solid var(--ink);border-radius:14px;overflow:hidden;background:#000}
+.player iframe{width:100%;height:100%;border:0;display:block}
+.panel h2{margin:0;font:400 30px var(--display);line-height:1}
+.meta{color:var(--ink2);font-size:15px;margin:0}
+.say{font:700 20px var(--hand);line-height:1.1;margin:0}
+.note{font-size:16px;margin:0;border-left:3px solid var(--ink);padding-left:10px}
+.yt{display:inline-block;text-align:center;border:2px solid var(--ink);padding:6px 12px;border-radius:5px 12px 5px 11px;color:var(--ink);text-decoration:none;font:700 16px var(--hand)}
+.yt:hover{background:var(--ink);color:var(--paper)}
+.stars{letter-spacing:3px}
+.hint{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:14px;font-size:13px;color:var(--ink2);text-align:right;pointer-events:none;max-width:200px}
+.seg{cursor:pointer}
+.seg .glow{transition:stroke-width .12s,opacity .12s;opacity:.55}
+.seg:hover .glow,.seg.sel .glow,.seg:focus .glow{opacity:.95;stroke-width:6.5}
+.seg:focus{outline:none}
+.lbl{font-family:var(--hand);fill:var(--ink);pointer-events:none}
+.mapnote{font-family:var(--small);font-style:italic;fill:var(--ink);pointer-events:none}
+.faint{fill:var(--ink2)}
+@media (max-width:700px){
+  .app{flex-direction:column}
+  .panel{width:100%;height:0;border-left:0;border-top:1.5px solid var(--ink);transition:height .25s ease}
+  .panel.open{width:100%;height:56%}
+  .panel-in{width:100%;flex-direction:row;flex-wrap:wrap;align-items:flex-start;gap:10px 14px}
+  .phone{width:110px;align-self:flex-start}
+  .player{width:140px;align-self:flex-start}
+  .legend{grid-template-columns:auto;font-size:15px;padding:6px 8px;bottom:10px}
+  .hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){.panel,#tip,.seg .glow{transition:none}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <div id="stage">
+    <svg id="map" role="img" aria-label="Hand-drawn axonometric map of downtown Ann Arbor with filmed bike routes"></svg>
+    <div class="title"><h1>Ann Arbor<br>Bike Map</h1><p>39 handlebar rides, street by street</p></div>
+    <div class="hint">hover a route · click to ride it<br>drag to move · scroll to zoom</div>
+    <div class="legend" id="legend"></div>
+    <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zreset" aria-label="Reset view" style="font-size:16px">fit</button><button id="zall" aria-label="Show the whole map" style="font-size:16px">all</button></div>
+    <div id="tip"></div>
+  </div>
+  <aside class="panel" id="panel" aria-live="polite"><div class="panel-in" id="panelIn"></div></aside>
+</div>
+<script>
+// clip catalogue from AnnArborBikeMap_Catalogue.xlsx
+// ---- clip data, read from AnnArborBikeMap_Catalogue.xlsx (Clip Inventory tab) ----
+// pts are hand-placed flat map coordinates (u east, v south); the drawing projects them into the tilted view.
+const INFRA={protected:'Protected lane',painted:'Painted bike lane',sharrow:'Sharrow',shared:'Shared road',trail:'Path / trail',gravel:'Gravel',sidewalk:'Sidewalk',other:'Other'};
+const C=[
+[1,'S Division St','Williams St','Liberty St','Northbound','protected',3,':53','Downtown Division Street protected bike lane','Smooth pavement, good sight lines, evening light','Downtown','29TrCLihIgk',[[450,470],[450,430]]],
+[2,'Industrial Ave','Stadium Blvd','Rosewood St','Southbound','painted',2,'1:43','Biking to get coffee at RoosRoast on Industrial Ave','Exposed, hot, uneven road.','Burns Park','AI48tfSRpmE',[[800,780],[800,900]]],
+[3,'State St','E Washington St','Liberty St','Southbound','painted',2,':14','Phase 1 of State Street reconfiguration','Construction, minimal traffic, tree canopy','Downtown','RJRB4lKYf7U',[[560,390],[560,430]]],
+[4,'S Division St','Benjamin St','Hill St','Northbound','protected',3,':15','S Division Street protected bike lane','','Downtown','Hg03o8SrFII',[[450,580],[450,540]]],
+[5,'Longshore Dr','Indianola','Shoreview Apartments','Southbound','gravel',1,'1:24','Unpaved by the river','','Argo Dam','CsP5popylVY',[[150,30],[215,75]]],
+[6,'B2B Trail, across Argo Dam','Argo Dam','Argo Dam Bridge','Westbound','trail',2,':28','Across Argo Dam','Short clip, stops halfway over the Argo bridge','Argo Dam','7lgzGt588aA',[[240,95],[130,95]]],
+[7,'B2B Trail, Argo Dam to Depot','Argo Dam','Depot St','Southbound','trail',3,'1:43','Ride the curvy B2B trail','','Argo Dam','JnTs1qCVT1g',[[200,105],[260,135],[330,150],[385,150]]],
+[8,'N Fifth Ave','Depot St','E Kingsley St','Southbound','shared',3,'2:05','Bike through old Kerrytown','','Kerrytown','qGoufPgdRlU',[[385,150],[385,220]]],
+[9,"Kerrytown Farmers Market",'E Kingsley St','Catherine St','Southbound','sidewalk',3,'1:14','Shortcut through the Kerrytown Farmers Market','','Kerrytown','4HezmZxQyHs',[[407,220],[407,270]]],
+[10,'Catherine St','Detroit St','Main St','Westbound','protected',3,':38','A stretch of protected bike lane on Catherine St','','Kerrytown','nQBZGse_b4w',[[385,268],[280,268]]],
+[11,'N Main St','Catherine St','Washington St','Southbound','sharrow',3,'1:52','','','Downtown','W8ZtrYno45Y',[[280,270],[280,390]]],
+[12,'N Main St','Washington St','W Williams St','Southbound','sharrow',3,'1:20','','Main St closed for the summer','Downtown','L3gJGfZkHHU',[[280,390],[280,470]]],
+[13,'Liberty St','S Fifth Ave','S Division St','Westbound','shared',2,':43','','','Downtown','n0SdXgSoTCM',[[450,430],[385,430]]],
+[14,'Liberty St','S Division St','S State St','Westbound','shared',2,'1:09','','','Downtown','FcUl49lprqs',[[560,430],[450,430]]],
+[15,'S State St','Liberty St','E Williams St','Southbound','shared',2,':51','','','Downtown','jbbDcQ6nX8Q',[[560,430],[560,470]]],
+[16,'E Williams St','S State St','Thompson St','Westbound','shared',2,':56','','','Downtown','3Gfjx2QyGVA',[[560,473],[505,473]]],
+[17,'Ann St','Main St / N Fourth Ave','Catherine St','Eastbound','painted',1,'1:32','','Very dark','Downtown','tk3IkMjmF5Y',[[280,310],[400,310]]],
+[18,'Detroit St','Catherine St','Broadway St','Eastbound','shared',1,'2:35','','','Kerrytown','m__ZlH1Fr9c',[[400,262],[470,170]]],
+[19,'Broadway St','Detroit St','Swift St','Eastbound','other',1,'2:19','','','Lowertown','NYJKp16EhJc',[[470,170],[330,140]]],
+[20,'Swift St','Broadway St','Pontiac Trail','Northbound','sidewalk',1,'1:30','','','Lowertown','vXVbmEHaZBw',[[330,140],[345,80]]],
+[21,'Pontiac Trail','Swift St','Apple St','Northbound','painted',1,'3:54','','','Lowertown','iGe9VXzoOJs',[[345,80],[390,10]]],
+[22,'Pontiac Trail','Apple St','Amherst','Northbound','painted',1,':58','','','Northside','MaSEfIvJXRs',[[390,10],[430,-40]]],
+[23,'Amherst','Pontiac Trail','Longshore Dr','Westbound','shared',1,':57','','','Northside','bVvoeMZdekc',[[430,-40],[270,-35]]],
+[24,'Longshore Dr','Amherst','Barton Dr','Northbound','gravel',1,'1:32','','','Northside','SmAxIZZbpRo',[[270,-35],[260,-100]]],
+[25,'Industrial Ave','Astor Ave','Rosewood St','Southbound','sidewalk',2,'2:01','','','Burns Park','ZnP4is3YWG4',[[812,780],[812,900]]],
+[26,'S State St','Henry St','Granger Ave','Northbound','sidewalk',2,'1:27','','','Southtown','PATn0x-4T0Q',[[560,770],[560,730]]],
+[27,'S State St','Granger Ave','E Hoover Ave','Northbound','sidewalk',2,'2:44','','','Southtown','ctjkbv3-6HA',[[560,730],[560,680]]],
+[28,'S State St','Hoover St','Packard St','Northbound','painted',2,':40','','','Downtown','tGoKY7zeLyg',[[560,680],[560,620]]],
+[29,'S State St','Packard St','Hill St','Northbound','sidewalk',1,'1:04','Opt for the sidewalk when the road is rough','','Downtown','KpMG1QZY630',[[560,620],[560,540]]],
+[30,'S State St','Hill St','S University St','Northbound','protected',3,'2:25','','','Campus','tYzlbaV1tCM',[[560,540],[560,500]]],
+[31,'State St','S University St','N University St','Northbound','shared',1,'2:13','','','Campus','u8dCqXgvdhc',[[552,500],[552,440]]],
+[32,'Williams St','State St','S Division St','Westbound','protected',3,':38','','','Downtown','lWVUnWd1BTQ',[[560,466],[450,466]]],
+[33,'S Division St','Williams St','E Huron St','Northbound','protected',3,'1:57','','','Downtown','l-eO_EKNQ5A',[[456,470],[456,350]]],
+[34,'Division St','E Huron St','Catherine St','Northbound','protected',3,':50','','','Downtown','uu2GnwABcEI',[[450,350],[450,270]]],
+[35,'Catherine St','Division St','N Fourth Ave','Westbound','protected',3,'1:00','','End at the sculpture plaza in Kerrytown','Kerrytown','uu2GnwABcEI',[[450,274],[335,274]]],
+[36,'S Division St','E Huron St','E Williams St','Southbound','protected',3,'2:09','','Cars parked in the protected bike lane','Downtown','IIznWzF0b3c',[[443,350],[443,470]]],
+[37,'S Division St','E Williams St','E Hoover Ave','Southbound','protected',3,'1:40','','','Downtown','NnbV-FbpYhQ',[[443,470],[443,680]]],
+[38,'E Hoover Ave','S Division St','S State St','Eastbound','painted',3,'1:19','','','Campus','lxOodf7zbIc',[[450,680],[560,680]]],
+[39,'Industrial Ave','Astor Ave','Rosewood St','Southbound','painted',1,':36','Biking to RoosRoast','','Southtown','DidtSmVNyCo',[[788,780],[788,900]]],
+[40,'S State St','Dewey Ave','E Hoover Ave','Northbound','other',0,'','','Not uploaded yet','','',[[560,700],[560,682]]]
+].map(r=>({id:r[0],st:r[1],from:r[2],to:r[3],dir:r[4],inf:r[5],q:r[6],dur:r[7],hover:r[8],note:r[9],hood:r[10],yt:r[11],pts:r[12]}));
+</script>
+<script>
+// ---- projection: image pixels -> flat map (x0.5) -> tilted view ----
+const SC=.5,K=.866,P=(x,y)=>{const u=x*SC,v=y*SC;return[(u-v)*K,(u+v)*.5]};
+let seed=5;const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const NS='http://www.w3.org/2000/svg',svg=document.getElementById('map');
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||svg).appendChild(e);return e};
+function sketch(pts,amp=1,step=22,close=false){
+  if(close)pts=pts.concat([pts[0]]);const o=[pts[0]];
+  for(let i=1;i<pts.length;i++){const[a,b]=pts[i-1],[c,d]=pts[i],n=Math.max(1,Math.round(Math.hypot(c-a,d-b)/step));
+    for(let k=1;k<=n;k++){const t=k/n;let x=a+(c-a)*t,y=b+(d-b)*t;if(k<n){x+=(rnd()-.5)*amp*2;y+=(rnd()-.5)*amp*2}o.push([x,y])}}
+  let s='M'+o[0][0].toFixed(1)+' '+o[0][1].toFixed(1);
+  for(let i=1;i<o.length-1;i++)s+='Q'+o[i][0].toFixed(1)+' '+o[i][1].toFixed(1)+' '+((o[i][0]+o[i+1][0])/2).toFixed(1)+' '+((o[i][1]+o[i+1][1])/2).toFixed(1);
+  const l=o[o.length-1];return s+'L'+l[0].toFixed(1)+' '+l[1].toFixed(1)}
+// Catmull-Rom smoothing for [x,y,w] points
+function smooth(p,n=6){const o=[];for(let i=0;i<p.length-1;i++){const a=p[Math.max(0,i-1)],b=p[i],c=p[i+1],d=p[Math.min(p.length-1,i+2)];
+  for(let k=0;k<n;k++){const t=k/n,t2=t*t,t3=t2*t,f=(q,r,s,u)=>.5*((2*r)+(-q+s)*t+(2*q-5*r+4*s-u)*t2+(-q+3*r-3*s+u)*t3);
+    o.push([f(a[0],b[0],c[0],d[0]),f(a[1],b[1],c[1],d[1]),b[2]!==undefined?b[2]+(c[2]-b[2])*t:0])}}
+  o.push(p[p.length-1]);return o}
+function ribbon(pts){const L=[],R=[];for(let i=0;i<pts.length;i++){const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)];let dx=b[0]-a[0],dy=b[1]-a[1];const n=Math.hypot(dx,dy)||1;dx/=n;dy/=n;const w=pts[i][2];
+  L.push([pts[i][0]-dy*w,pts[i][1]+dx*w]);R.push([pts[i][0]+dy*w,pts[i][1]-dx*w])}return[L,R]}
+const proj=a=>a.map(p=>P(p[0],p[1]));
+
+// ---- traced from the screenshot (pixel coordinates, north up) ----
+const W=1750,H=1560;
+const RIVER=[[140,195,5],[185,232,7],[270,222,8],[340,205,12],[400,195,24],[470,205,30],[530,255,30],[565,310,22],[530,350,8],[510,395,7],[560,430,8],[610,440,9],[655,455,12],[668,505,11],[640,550,9],[618,595,8],[650,625,6],[710,640,5],[775,630,5],[825,650,5],[850,700,6],[900,720,6],[960,745,8],[1040,790,12],[1110,845,16],[1180,900,24],[1245,950,20],[1330,945,10],[1400,950,9],[1470,975,9],[1540,925,9],[1620,890,10],[1670,900,10],[1682,960,9],[1655,1030,8],[1650,1085,7],[1720,1095,6]];
+const HWY=[
+ {n:'US-23 north',t:'fwy',p:[[682,0],[690,100],[698,150],[716,180]]},
+ {n:'US-23 east loop',t:'fwy',p:[[716,180],[760,172],[850,165],[950,158],[1050,155],[1150,162],[1215,180],[1245,200],[1250,260],[1240,330],[1245,400],[1262,470],[1300,570],[1330,660],[1342,760],[1340,860],[1338,950],[1325,1010],[1290,1050],[1250,1100],[1232,1150],[1232,1250],[1215,1380],[1200,1470],[1195,1560]]},
+ {n:'US-23 / M-14 south-west leg',t:'fwy',p:[[716,180],[700,240],[672,310],[650,385],[636,420],[612,460],[608,520],[598,610],[590,690],[585,735]]},
+ {n:'I-94 west',t:'fwy',p:[[0,590],[60,610],[130,640],[190,690],[205,725]]},
+ {n:'I-94 business loop',t:'fwy',p:[[205,725],[300,722],[400,715],[500,725],[585,735],[660,738],[740,745],[738,800],[790,870],[850,950],[940,1060],[1050,1095],[1150,1120],[1232,1152]]},
+ {n:'I-94 south',t:'fwy',p:[[205,725],[198,850],[200,1000],[250,1080],[340,1180],[390,1235],[440,1290],[520,1340],[620,1370],[700,1372],[770,1368],[900,1375],[1010,1410],[1100,1470],[1180,1540],[1195,1560]]},
+ {n:'M-14 west',t:'st',p:[[0,585],[60,555],[130,510],[180,485],[235,445],[300,432],[390,458],[480,488],[560,492],[610,475],[618,458]]},
+ {n:'M-14 east',t:'st',p:[[1245,190],[1350,170],[1500,162],[1620,168],[1725,172]]},
+ {n:'M-17',t:'st',p:[[1245,1155],[1340,1190],[1440,1222],[1550,1250],[1650,1272]]}];
+const SHIELDS=[['23',948,158],['23',1310,1000],['14',620,455],['14',188,482],['14',1500,160],['94',205,725],['94',725,1365],['17',1440,1220]];
+
+// ---- draw ----
+const gSlab=el('g'),gLand=el('g'),gRiver=el('g'),gHwy=el('g'),gText=el('g');
+const corners=[[0,0],[W,0],[W,H],[0,H]],cs=proj(corners),T=18;
+// slab edges give the sheet some thickness
+[[1,2],[2,3]].forEach(([a,b],i)=>{const A=cs[a],B=cs[b];
+  el('polygon',{points:[A,B,[B[0],B[1]+T],[A[0],A[1]+T]].map(p=>p.map(x=>x.toFixed(1)).join(',')).join(' '),fill:'color-mix(in srgb,var(--ink) '+(i?24:12)+'%,var(--paper2))',stroke:'var(--ink)','stroke-width':1.6,'stroke-linejoin':'round'},gSlab)});
+el('path',{d:sketch(cs,2,40,true),fill:'var(--paper2)',stroke:'var(--ink)','stroke-width':1.8,'stroke-linejoin':'round'},gLand);
+el('path',{d:sketch(proj(corners.map(c=>[c[0]+(c[0]?-26:26),c[1]+(c[1]?-26:26)])),2,40,true),fill:'none',stroke:'var(--ink)','stroke-width':1,'stroke-dasharray':'2 7','stroke-linecap':'round',opacity:.7},gLand);
+// river
+{const sm=smooth(RIVER,8).map(p=>[...P(p[0],p[1]),p[2]*SC*1.5]);const[L,R]=ribbon(sm);
+ el('path',{d:sketch(L.concat(R.slice().reverse()),.8,14,true),fill:'var(--water)',stroke:'none'},gRiver);
+ [L,R].forEach(b=>el('path',{d:sketch(b,.9,16),fill:'none',stroke:'var(--water-ink)','stroke-width':1.8,'stroke-linecap':'round','stroke-linejoin':'round'},gRiver));
+ for(let i=0;i<70;i++){const j=Math.floor(rnd()*(sm.length-2)),a=sm[j],b=sm[j+1],o=(rnd()-.5)*a[2]*1.1;if(a[2]<5)continue;
+  el('path',{d:sketch([[a[0]-7+o*.3,a[1]+o],[a[0]+7+o*.3,a[1]+o+.8]],.5,8),fill:'none',stroke:'var(--water-ink)','stroke-width':1,opacity:.65,'stroke-linecap':'round'},gRiver)}}
+// highways
+HWY.forEach(h=>{const sm=smooth(h.p.map(p=>[p[0],p[1],0]),6).map(p=>P(p[0],p[1])),fw=h.t==='fwy',w=fw?7:5;
+  el('path',{d:sketch(sm,.9,22),fill:'none',stroke:'var(--ink)','stroke-width':w+2.4,'stroke-linecap':'round','stroke-linejoin':'round'},gHwy);
+  el('path',{d:sketch(sm,.2,60),fill:'none',stroke:fw?'var(--hwy)':'var(--hwy2)','stroke-width':w,'stroke-linecap':'round','stroke-linejoin':'round'},gHwy)});
+// shields
+SHIELDS.forEach(([n,x,y])=>{const p=P(x,y),g=el('g',{},gText);
+  el('circle',{cx:p[0],cy:p[1],r:12.5,fill:'var(--paper)',stroke:'var(--ink)','stroke-width':1.8},g);
+  const t=el('text',{x:p[0],y:p[1]+5.5,'text-anchor':'middle','font-size':n.length>1?15:15,'font-weight':700,class:'lbl'},g);t.textContent=n;t.style.stroke='none'});
+// handwriting
+const halo=t=>{t.style.paintOrder='stroke';t.style.stroke='var(--paper2)';t.style.strokeWidth='5px';t.style.strokeLinejoin='round'};
+function label(txt,x,y,{ang=0,size=20,fam,ls=2,dx=0,dy=0}={}){const p=P(x,y),t=el('text',{class:'lbl',transform:'translate('+(p[0]+dx)+' '+(p[1]+dy)+') rotate('+ang+')','text-anchor':'middle','font-size':size,'letter-spacing':ls},gText);if(fam)t.style.fontFamily=fam;halo(t);t.textContent=txt}
+label('Huron River',1190,800,{ang:30,size:24,fam:'var(--display)',ls:2,dy:-6});
+label('Barton Pond',455,262,{size:20,ls:2,dy:2});
+label('to Detroit',1650,205,{size:17,ls:1,fam:'var(--hand)',dy:-14});label('to Jackson',110,640,{size:17,ls:1,fam:'var(--hand)',dy:-14});label('to Toledo',1195,1520,{size:17,ls:1,fam:'var(--hand)',dy:24});
+label('to Brighton',688,40,{size:17,ls:1,fam:'var(--hand)',dy:-14});
+
+// ---- roads and filmed routes: the earlier hand-placed grid, mapped onto the traced base ----
+// anchors: old north-south position -> pixel y on the screenshot; east-west is a straight scale with a slight lean
+const VA=[[-100,430],[120,575],[350,735],[470,820],[620,930],[680,985],[860,1240],[1000,1340]];
+const pw=v=>{for(let i=1;i<VA.length;i++)if(v<=VA[i][0]||i===VA.length-1){const a=VA[i-1],b=VA[i];return a[1]+(v-a[0])/(b[0]-a[0])*(b[1]-a[1])}};
+const toPx=(u,v)=>{const y=pw(v);return[588+(u-280)*.5+(y-735)*.1,y]};
+const dens=(pts,step=18)=>{const o=[];for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/step));for(let k=0;k<n;k++)o.push([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n])}o.push(pts[pts.length-1]);return o};
+const mapPts=pts=>dens(pts).map(p=>P(...toPx(p[0],p[1])));
+const MAJOR=new Set(['Main St','State St','Division St','Huron St','Washington St','Packard St','Stadium Blvd']);
+const ST=[['Depot St',[[200,150],[520,150]]],['Kingsley St',[[280,220],[520,220]]],['Catherine St',[[280,270],[520,270]]],['Ann St',[[280,310],[520,310]]],
+['Huron St',[[230,350],[640,350]]],['Washington St',[[230,390],[640,390]]],['Liberty St',[[230,430],[640,430]]],['Williams St',[[230,470],[640,470]]],
+['Hill St',[[300,540],[700,540]]],['Packard St',[[300,620],[780,620]]],['Hoover Ave',[[300,680],[700,680]]],['Stadium Blvd',[[480,860],[880,860]]],
+['Main St',[[280,150],[280,560]]],['Fourth Ave',[[335,150],[335,470]]],['Fifth Ave',[[385,150],[385,620]]],['Division St',[[450,220],[450,700]]],
+['State St',[[560,270],[560,860]]],['Thompson St',[[505,430],[505,560]]],['Industrial Ave',[[800,740],[800,940]]],
+['Detroit St',[[400,262],[470,170]]],['Broadway',[[470,170],[330,140]]],['Swift St',[[330,140],[345,80]]],['Pontiac Trail',[[345,80],[430,-40]]],
+['Amherst',[[430,-40],[270,-35]]],['Longshore Dr',[[150,30],[215,75]]],['Longshore Dr ',[[270,-35],[260,-100]]]];
+const gRoads=el('g');svg.insertBefore(gRoads,gHwy);
+const gRoutes=el('g');svg.insertBefore(gRoutes,gText);
+// campus quad
+{const[a,b,c,d]=[585,392,792,538],q=[[a,b],[c,b],[c,d],[a,d]].map(p=>P(...toPx(...p)));
+ el('path',{d:sketch(q,.6,14,true),fill:'var(--grass)',stroke:'var(--ink)','stroke-width':1,'stroke-linejoin':'round'},gRoads)}
+ST.forEach(([n,pts])=>{const fp=mapPts(pts),w=MAJOR.has(n)?3:2.4;
+  el('path',{d:sketch(fp,.5,12),fill:'none',stroke:'var(--ink)','stroke-width':w+1.1,'stroke-linecap':'round','stroke-linejoin':'round'},gRoads);
+  el('path',{d:sketch(fp,.1,40),fill:'none',stroke:'var(--paper2)','stroke-width':w-.5,'stroke-linecap':'round','stroke-linejoin':'round'},gRoads)});
+// routes
+const DASH={trail:'5 3',gravel:'1.5 3',sidewalk:'3 3'},col=k=>'var(--'+k+')',segEls={};
+C.forEach(c=>{
+  const fp=mapPts(c.pts),d=sketch(fp,.35,10),ghost=!c.yt,color=ghost?'var(--ink2)':col(c.inf);
+  const g=el('g',{class:'seg',tabindex:0,role:'button','aria-label':c.st+', '+c.dir+', '+INFRA[c.inf]+(ghost?', not uploaded yet':''),'data-id':c.id},gRoutes);
+  if(!ghost)el('path',{class:'glow',d,fill:'none',stroke:color,'stroke-width':4,'stroke-linecap':'round','stroke-linejoin':'round'},g);
+  el('path',{d,fill:'none',stroke:color,'stroke-width':ghost?1.2:1.9,'stroke-linecap':'round','stroke-linejoin':'round','stroke-dasharray':ghost?'1.5 3':(DASH[c.inf]||'none')},g);
+  const e=fp[fp.length-1],pr=fp[Math.max(0,fp.length-3)],a=Math.atan2(e[1]-pr[1],e[0]-pr[0]),L=5.5,Wd=3.2;
+  const tip=[e[0]+Math.cos(a)*3.5,e[1]+Math.sin(a)*3.5],b1=[tip[0]-Math.cos(a)*L-Math.sin(a)*Wd,tip[1]-Math.sin(a)*L+Math.cos(a)*Wd],b2=[tip[0]-Math.cos(a)*L+Math.sin(a)*Wd,tip[1]-Math.sin(a)*L-Math.cos(a)*Wd];
+  el('polygon',{points:[tip,b1,b2].map(p=>p.map(x=>x.toFixed(1)).join(',')).join(' '),fill:color,stroke:'var(--paper)','stroke-width':.6,'stroke-linejoin':'round'},g);
+  el('circle',{cx:fp[0][0],cy:fp[0][1],r:2.5,fill:ghost?'var(--paper)':color,stroke:ghost?'var(--ink2)':'var(--paper)','stroke-width':1},g);
+  el('path',{d,fill:'none',stroke:'transparent','stroke-width':11,'stroke-linecap':'round'},g);
+  segEls[c.id]=g});
+// handwriting for the street grid
+const O=(t,u,v,o)=>label(t,...toPx(u,v),o);
+[['MAIN ST',268,520,-30],['FIFTH AVE',398,590,-30],['DIVISION ST',466,640,-30],['STATE ST',574,805,-30],['INDUSTRIAL AVE',826,830,-30],
+ ['HURON ST',610,338,30],['WASHINGTON ST',618,378,30],['LIBERTY ST',262,417,30],['WILLIAMS ST',262,457,30],['HILL ST',340,527,30],['PACKARD ST',700,607,30],['HOOVER AVE',640,667,30],
+ ['KINGSLEY ST',472,207,30],['DEPOT ST',472,137,30],['STADIUM BLVD',650,847,30]].forEach(([t,u,v,a])=>O(t,u,v,{ang:a,size:4.1,ls:.7}));
+O('UNIVERSITY OF MICHIGAN',688,372,{size:6,ls:1.2});O('KERRYTOWN',432,194,{size:7,ls:1.5});O('LOWERTOWN',410,122,{size:6,ls:1.2});O('NORTHSIDE',330,-75,{size:8,ls:1.6});
+O('BURNS PARK',870,690,{size:8,ls:1.6});O('SOUTHTOWN',640,762,{size:8,ls:1.6});O('DOWNTOWN',120,400,{size:8,ls:1.6,fam:'var(--display)'});
+const NOTES=[[36,'cars parked in|the protected lane!',-30,12],[12,'Main St closed|for the summer',-32,-4],[17,'very dark',-24,-18],[35,'ends at the|sculpture plaza',-8,-24],
+ [29,'sidewalk when|the road is rough',36,8],[3,'Phase 1 of the State St|reconfiguration: construction',34,-14],[5,'unpaved|by the river',-24,-10],[7,'the curvy B2B trail',-4,18],
+ [2,'coffee at RoosRoast',-34,8],[9,'shortcut through|the Farmers Market',38,6],[24,'gravel again',-22,-6]];
+NOTES.forEach(([id,txt,dx,dy])=>{
+  const c=C.find(x=>x.id===id),fp=mapPts(c.pts),m=fp[Math.floor(fp.length/2)],tx=m[0]+dx,ty=m[1]+dy;
+  const t=el('text',{class:'mapnote',transform:'translate('+tx.toFixed(1)+' '+ty.toFixed(1)+')','text-anchor':dx<0?'end':'start','font-size':6.6,'letter-spacing':.1},gText);halo(t);t.style.strokeWidth='3px';
+  txt.split('|').forEach((s,i)=>{const sp=el('tspan',{x:0,dy:i?7:0},t);sp.textContent=s});
+  const sx=tx+(dx<0?2:-2),sy=ty-3,ex=m[0]-Math.sign(dx)*2,ey=m[1]+(dy<0?-2:2);
+  el('path',{d:'M'+sx+' '+sy+'Q'+((sx+ex)/2+(dy<0?4:-4))+' '+((sy+ey)/2+(dy<0?-3:3))+' '+ex+' '+ey,fill:'none',stroke:'var(--ink)','stroke-width':.6,'stroke-linecap':'round',opacity:.8},gText)});
+// legend
+{const lg=document.getElementById('legend');Object.keys(INFRA).forEach(k=>{const s=document.createElement('span'),i=document.createElement('i');if(DASH[k]){i.className='dash';i.style.color=col(k)}else i.style.background=col(k);s.append(i,INFRA[k]);lg.append(s)});
+ const g=document.createElement('span'),i=document.createElement('i');i.className='dash';i.style.color='var(--ink2)';g.append(i,'not uploaded yet');lg.append(g)}
+
+// ---- view: pan and zoom ----
+const stage=document.getElementById('stage');
+const BB=(()=>{let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;cs.forEach(p=>{x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]+T)});return{x0,y0,x1,y1}})();
+const V={cx:0,cy:0,w:1};let fitW=1;
+const size=()=>({cw:stage.clientWidth||800,ch:stage.clientHeight||600});
+function apply(){const{cw,ch}=size(),h=V.w*ch/cw;svg.setAttribute('viewBox',(V.cx-V.w/2).toFixed(1)+' '+(V.cy-h/2).toFixed(1)+' '+V.w.toFixed(1)+' '+h.toFixed(1))}
+function fitAll(){const{cw,ch}=size();fitW=Math.max((BB.x1-BB.x0)*1.05,(BB.y1-BB.y0+120)*1.05*cw/ch);V.w=fitW;V.cx=(BB.x0+BB.x1)/2;V.cy=(BB.y0+BB.y1)/2+40;apply()}
+function fit(){const{cw,ch}=size();fitAll();let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;C.forEach(c=>mapPts(c.pts).forEach(p=>{x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1])}));
+  const pad=150,w=Math.max(x1-x0+pad*2,(y1-y0+pad*2+120)*cw/ch);V.w=w;V.cx=(x0+x1)/2;V.cy=(y0+y1)/2+60;apply()}
+function zoomAt(f,px,py){const{cw,ch}=size(),w2=Math.min(fitW*1.15,Math.max(fitW/14,V.w*f)),upp=V.w/cw,wx=V.cx-V.w/2+px*upp,wy=V.cy-(V.w*ch/cw)/2+py*upp;V.w=w2;const u2=V.w/cw;V.cx=wx-px*u2+V.w/2;V.cy=wy-py*u2+(V.w*ch/cw)/2;apply()}
+new ResizeObserver(apply).observe(stage);
+document.getElementById('zin').onclick=()=>zoomAt(.7,size().cw/2,size().ch/2);
+document.getElementById('zout').onclick=()=>zoomAt(1/.7,size().cw/2,size().ch/2);
+document.getElementById('zreset').onclick=fit;document.getElementById('zall').onclick=fitAll;
+stage.addEventListener('wheel',e=>{e.preventDefault();const r=stage.getBoundingClientRect();zoomAt(Math.exp(e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top)},{passive:false});
+const ptrs=new Map();let pinch=0,moved=0;
+stage.addEventListener('pointerdown',e=>{if(e.target.closest('.zoom'))return;ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved=0;stage.classList.add('drag');if(ptrs.size===2){const[a,b]=[...ptrs.values()];pinch=Math.hypot(a[0]-b[0],a[1]-b[1])}});
+window.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;const p=ptrs.get(e.pointerId),dx=e.clientX-p[0],dy=e.clientY-p[1];ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved+=Math.abs(dx)+Math.abs(dy);const upp=V.w/size().cw;
+  if(ptrs.size===1){V.cx-=dx*upp;V.cy-=dy*upp;apply();if(typeof hideTip==='function')hideTip()}else if(ptrs.size===2){const[a,b]=[...ptrs.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]),r=stage.getBoundingClientRect();if(pinch)zoomAt(pinch/d,(a[0]+b[0])/2-r.left,(a[1]+b[1])/2-r.top);pinch=d}});
+const up=e=>{ptrs.delete(e.pointerId);if(!ptrs.size)stage.classList.remove('drag');pinch=0};
+window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+const tipEl=document.getElementById('tip'),panel=document.getElementById('panel'),panelIn=document.getElementById('panelIn');
+// ---- hover tip + ride panel ----
+const stars=q=>q?'<span class="stars" aria-label="quality '+q+' of 3">'+'★'.repeat(q)+'☆'.repeat(3-q)+'</span>':'';
+const QW=['unrated','poor footage','good footage','great footage'];
+const line=c=>c.hover||c.st+(c.from?', '+c.from+' to '+c.to:'');
+function moveTip(e){const r=stage.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,w=tipEl.offsetWidth;
+  tipEl.style.left=Math.min(Math.max(8,x+16),r.width-w-8)+'px';tipEl.style.top=Math.max(8,y-tipEl.offsetHeight-12)+'px'}
+function hideTip(){tipEl.classList.remove('on')}
+let selId=null;
+function openClip(c){
+  selId=c.id;Object.values(segEls).forEach(g=>g.classList.remove('sel'));segEls[c.id].classList.add('sel');
+  const url=c.yt?'https://www.youtube.com/shorts/'+c.yt:'';
+  panelIn.innerHTML='<button class="close" id="pclose" aria-label="Close">&times;</button>'+
+  (c.yt?'<div class="player"><iframe src="https://www.youtube-nocookie.com/embed/'+c.yt+'?autoplay=1&rel=0&playsinline=1" title="'+c.st+', '+c.dir+'" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe></div>':'<div class="phone" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M16 10 L46 28 L16 46 Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>no video yet</small></div>')+
+  '<div><h2>'+c.st+'</h2><p class="meta">'+c.dir+' · '+c.from+' to '+c.to+'</p><p class="meta">'+(c.hood?c.hood+' · ':'')+INFRA[c.inf]+' '+stars(c.q)+'</p></div>'+
+  (c.hover?'<p class="say">'+c.hover+'</p>':'')+(c.note?'<p class="note">'+c.note+'</p>':'')+
+  (url?'<a class="yt" href="'+url+'" target="_blank" rel="noopener">Open on YouTube &#8599;</a>':'<p class="meta">This one is filmed but not uploaded yet.</p>');
+  panel.classList.add('open');document.getElementById('pclose').onclick=closePanel}
+function closePanel(){panel.classList.remove('open');panelIn.innerHTML='';Object.values(segEls).forEach(g=>g.classList.remove('sel'));selId=null}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel()});
+C.forEach(c=>{const g=segEls[c.id];
+  g.addEventListener('pointerenter',e=>{if(ptrs.size)return;tipEl.innerHTML='<b>'+c.st+'</b><em>'+c.dir+' · '+INFRA[c.inf]+' '+stars(c.q)+'</em>'+(c.hover?'<q>'+c.hover+'</q>':'');tipEl.classList.add('on');moveTip(e)});
+  g.addEventListener('pointerleave',hideTip);
+  g.addEventListener('click',()=>{if(moved<6)openClip(c)});
+  g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openClip(c)}})});
+fit();
+</script>
+
+</body>
+</html>
